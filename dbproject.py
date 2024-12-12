@@ -370,7 +370,34 @@ def apply_classroom(connection, user_id, user_club):
 
     finally:
         cursor.close()
+# 강의실 예약 상태 확인
+def view_classroom_status(connection, user_id, user_club):
+    cursor = connection.cursor()
+    try:
+        query = """
+                SELECT 
+                    r.apply_uid,
+                    r.apply_classroomid,
+                    r.user_id,
+                    r.rent_start,
+                    r.rent_end,
+                    u.username,
+                    u.user_club
+                FROM 
+                    rent r
+                JOIN 
+                    user u ON r.user_id = u.Uid;
+                """
+        cursor.execute(query)
+        reservations = cursor.fetchall()
 
+        if reservations:
+            for reservation in reservations:
+                print(f"강의실: {reservation[0]} | 강의실 번호: {reservation[1]} | 학번: {reservation[2]} | 시작시간: {reservation[3]} 종료시간: {reservation[4]}")
+        else:
+            print(f"{user_club} 동아리에는 예약된 강의실이 없습니다.")
+    except mysql.connector.Error as err:
+        print(f"강의실 예약 상태 조회 에러: {err}")
 
 # 로그인 후 메뉴
 def logged_in_menu(connection, user_id, username, user_club):

@@ -57,13 +57,13 @@ def login(connection):
         userphonenumber = input("사용자 전화번호 입력: ")
 
         # 사용자 인증
-        auth_query = "SELECT username, user_club FROM user WHERE Uid = %s AND userphonenumber = %s"
+        auth_query = "SELECT Uid, username, user_club FROM user WHERE Uid = %s AND userphonenumber = %s"
         cursor.execute(auth_query, (uid, userphonenumber))
         result = cursor.fetchone()
 
         if result:
-            print(f"로그인 성공! {result[0]}님은 {result[1]} 동아리에 소속되어 있습니다.")
-            return result[0], result[1]  #사용자 이름과 동아리 이름
+            print(f"로그인 성공! {result[0]} {result[1]}님은 {result[2]} 동아리에 소속되어 있습니다.")
+            return result[0], result[1], result[2]  # 학번, 사용자 이름, 동아리 이름
         else:
             print("로그인 실패: 학번 또는 전화번호를 확인하세요.")
             return None, None
@@ -160,7 +160,7 @@ def delete_schedule(connection, user_club):
         event_id = input("삭제할 이벤트의 ID를 입력하세요: ")
 
         # 삭제
-        delete_query = "DELETE FROM schedule WHERE id = %s AND clubname = %s"
+        delete_query = "DELETE FROM schedule WHERE schedule_id = %s AND clubname = %s"
         cursor.execute(delete_query, (event_id, user_club))
         connection.commit()
         print("일정 삭제 성공!")
@@ -183,7 +183,7 @@ def manage_clubmember(connection, user_club):
         if choice == "1":#회원 등록 승인해주기
            approve_clubmember(connection, user_club)
         elif choice == "2":#회원모두보기
-            view_clubmember(connection, user_club)
+            view_clubmember(connection,user_club)
             break
         else:
             print("잘못된 선택입니다. 다시 시도하세요.")
@@ -247,38 +247,138 @@ def approve_clubmember(connection, user_club):
         cursor.close()
 
 
-
+#동아리 회원 조회
 def view_clubmember(connection, user_club):
     cursor = connection.cursor()
     try:
-        print(f"\n{user_club} 동아리의 모든 회원을 조회합니다.")
-        
-        # 동아리의 승인된 회원 목록 조회 (동아리 이름 제외)
         query = """
-        SELECT memberUid, membername, memberdepartment, memberphonenumber
-        FROM clubmember
-        WHERE register_clubname = %s
+                   SELECT * from (
+            SELECT c.clubname, cm.membername as names ,cm.memberUid as stn
+            FROM 
+                club c
+            JOIN 
+                clubmember cm ON c.clubname  = cm.register_clubname
+            UNION
+            SELECT c.clubname, u.username as names, u.Uid as stn
+            FROM club c JOIN 
+                user u ON c.clubname  = u.user_club) AS union_talbe
+            WHERE clubname = %s;
         """
         cursor.execute(query, (user_club,))
         members = cursor.fetchall()
 
         if members:
-            print(f"{user_club} 동아리의 모든 회원 목록:")
+            print(f"{user_club}동아리 회원 목록")
             for member in members:
-                print(f"학번: {member[0]}, 이름: {member[1]}, 학과: {member[2]}, 전화번호: {member[3]}")
+                print(f"학번: {member[2]} 이름: {member[1]}")
         else:
             print(f"{user_club} 동아리에는 등록된 회원이 없습니다.")
     except mysql.connector.Error as err:
         print(f"회원 조회 에러: {err}")
     finally:
         cursor.close()
+
+# 강의실 관리
+def manage_classroom(connection, user_id, user_club):
+    cursor = connection.cursor()
+    while True:
+        print("1. 강의실 신청")
+        print("2. 강의실 예약 상태 확인")
+        print("3. 뒤로 가기")
+        choice = input("선택: ")
+
+        if choice == "1":
+            apply_classroom(connection, user_id, user_club)
+        elif choice == "2":
+            view_classroom_status(connection, user_id, user_club)
+        elif choice == "3":
+
+
+            break
+        else:
+            print("잘못된 선택입니다. 다시 시도하세요.")
+def view_classroom(connection):
+    cursor = connection.cursor()
+    try:
+        # 강의실 목록 조회 쿼리
+        query = "SELECT classroom_id, classroom_name, occupancy FROM classroom"
+        cursor.execute(query)
+        classrooms = cursor.fetchall()
+
+        if classrooms:
+            print(f"강의실 목록:")
+            for classroom in classrooms:
+                print(f"ID: {classroom[0]} | 강의실 이름: {classroom[1]} | 수용 인원: {classroom[2]}")
+        else:
+            print(f"남은 강의실이 존재하지 않습니다.")
+    except mysql.connector.Error as err:
+        print(f"강의실 조회 에러: {err}")
+
+def apply_classroom(connection, user_id, user_club):
+    cursor = connection.cursor()
+    view_classroom(connection)
+    try:
+        # 강의실 ID와 예약 시간 입력 받기
+        classroom_id = input("예약할 강의실 ID를 입력하세요: ").strip()
+        rent_start = input("예약 시작 시간 (YYYY-MM-DD HH:MM)을 입력하세요: ").strip()
+        rent_end = input("예약 종료 시간 (YYYY-MM-DD HH:MM)을 입력하세요: ").strip()
+        print('강의실 번호 ',classroom_id)
+        print('-----Error------ 사용자 아이디: ', user_id)
+
+        print('시작시간', rent_start)
+        print('종료시간', rent_end)
+
+        # 입력값 검증
+        if not classroom_id or not rent_start or not rent_end:
+            print("모든 입력값을 정확히 입력해주세요.")
+            return
+
+        # 겹치는 예약 확인 쿼리
+        overlap_query = """
+            SELECT COUNT(*) FROM rent
+            WHERE apply_classroomid = %s
+            AND (
+                (rent_start < %s AND rent_end > %s) 
+                OR (rent_start < %s AND rent_end > %s)
+                OR (rent_start >= %s AND rent_end <= %s)
+            );
+        """
+
+        cursor.execute(overlap_query, (classroom_id, rent_end, rent_end, rent_start, rent_start, rent_start, rent_end))
+        overlap_count = cursor.fetchone()[0]
+
+        if overlap_count > 0:
+           print("예약 시간이 겹칩니다. 다른 시간을 선택해주세요.")
+           return
+        print('line ----------------------')
+        
+        # 예약 입력 쿼리
+        insert_query = """
+            INSERT INTO rent (apply_classroomid, user_id, rent_start, rent_end)
+            VALUES (%s, %s, %s, %s);
+        """
+
+        # 올바르게 바인딩된 값 전달
+        cursor.execute(insert_query, (classroom_id, user_id, rent_start, rent_end))
+        connection.commit()
+
+        print(f"강의실 예약 성공! 예약 ID는 {cursor.lastrowid}입니다.")
+
+    except mysql.connector.Error as err:
+        print(f"예약 중 에러 발생: {err}")
+        connection.rollback()
+
+    finally:
+        cursor.close()
+
+
 # 로그인 후 메뉴
-def logged_in_menu(connection, username, user_club):
+def logged_in_menu(connection, user_id, username, user_club):
     while True:
         print("\n메뉴:")
         print("1. 동아리 일정 관리")
         print("2. 동아리 회원 관리")
-        print("3. 강의실 신청 관리")
+        print("3. 강의실 신청")
         print("4. 로그아웃")
         choice = input("선택: ")
 
@@ -286,8 +386,8 @@ def logged_in_menu(connection, username, user_club):
             manage_schedule(connection, user_club)
         elif choice == "2":
             manage_clubmember(connection, user_club)
-        # elif choice == "3":
-        #     manage_classroom(connection)
+        elif choice == "3":
+            manage_classroom(connection, user_id, user_club)
         elif choice == "4":
             print(f"{username}님, 로그아웃되었습니다.")
             break
@@ -309,9 +409,9 @@ def main():
                 if choice == "1":
                     register(connection)
                 elif choice == "2":
-                    username, user_club = login(connection)
-                    if username and user_club:
-                        logged_in_menu(connection, username, user_club)
+                    user_id, username, user_club = login(connection)
+                    if user_id and username and user_club:
+                        logged_in_menu(connection, user_id, username, user_club)
                 elif choice == "3":
                     print("프로그램을 종료합니다.")
                     break

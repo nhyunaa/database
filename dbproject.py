@@ -136,15 +136,49 @@ def update_schedule(connection, user_club):
     cursor = connection.cursor()
     try:
         print(f"\n{user_club} 동아리의 일정을 수정합니다.")
-        view_schedules(connection, user_club)
-        event_id = input("수정할 이벤트의 ID를 입력하세요: ")
-        event_name = input("새로운 이벤트 이름을 입력하세요: ")
-        event_date = input("새로운 이벤트 날짜를 입력하세요 (YYYY-MM-DD): ")
-        event_time = input("새로운 이벤트 시간을 입력하세요 (HH:MM): ")
+        view_schedules(connection, user_club)  # 일정 보기 함수 호출 (미리 정의되어 있다고 가정)
+        
+        event_id = input("수정할 이벤트의 ID를 입력하세요: ").strip()
+        
+        # 수정할 항목 선택
+        print("\n수정할 항목을 선택하세요:")
+        print("1. 이벤트 이름 수정")
+        print("2. 이벤트 날짜 수정")
+        print("3. 이벤트 시간 수정")
+        print("4. 모두 수정")
+        choice = input("수정할 항목 번호를 입력하세요: ").strip()
+
+        # 수정할 항목에 따라 처리
+        if choice == "1" or choice == "4":  # 이벤트 이름 수정
+            event_name = input("수정할 이벤트 이름을 입력하세요: ").strip()
+        if choice == "2" or choice == "4":  # 이벤트 날짜 수정
+            event_date = input("수정할 이벤트 날짜를 입력하세요 (YYYY-MM-DD): ").strip()
+        if choice == "3" or choice == "4":  # 이벤트 시간 수정
+            event_time = input("수정할 이벤트 시간을 입력하세요 (HH:MM): ").strip()
 
         # 수정
-        update_query = "UPDATE schedule SET event_name = %s, event_date = %s, event_time = %s WHERE id = %s AND clubname = %s"
-        cursor.execute(update_query, (event_name, event_date, event_time, event_id, user_club))
+                # 선택한 항목에 맞춰 업데이트
+        update_query = "UPDATE schedule SET"
+        params = []
+
+        if choice == "1" or choice == "4":
+            update_query += " event_name = %s"
+            params.append(event_name)
+
+        if choice == "2" or choice == "4":
+            update_query += " event_date = %s"
+            params.append(event_date)
+
+        if choice == "3" or choice == "4":
+            update_query += " event_time = %s"
+            params.append(event_time)
+
+        # 이벤트 ID와 동아리 이름을 조건으로 추가
+        update_query += " WHERE schedule_id = %s AND clubname = %s"
+        params.extend([event_id, user_club])
+
+        # 실행
+        cursor.execute(update_query, tuple(params))
         connection.commit()
         print("일정 수정 성공!")
     except mysql.connector.Error as err:

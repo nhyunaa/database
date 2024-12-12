@@ -56,20 +56,36 @@ def login(connection):
         uid = input("학번을 입력하세요: ")  
         userphonenumber = input("사용자 전화번호 입력: ")
 
-        # 사용자 인증
-        auth_query = "SELECT Uid, username, user_club FROM user WHERE Uid = %s AND userphonenumber = %s"
+       # 사용자 동아리 정보 쿼리 
+        auth_query = """
+            SELECT 
+                u.Uid, 
+                u.username, 
+                u.user_club, 
+                c.clubacademicadviser,
+                c.clublocation 
+            FROM 
+                user u 
+            JOIN 
+                club c 
+            ON 
+                u.user_club = c.clubname 
+            WHERE 
+                u.Uid = %s AND u.userphonenumber = %s
+        """ 
         cursor.execute(auth_query, (uid, userphonenumber))
         result = cursor.fetchone()
 
         if result:
             print(f"로그인 성공! {result[0]} {result[1]}님은 {result[2]} 동아리에 소속되어 있습니다.")
-            return result[0], result[1], result[2]  # 학번, 사용자 이름, 동아리 이름
+            print(f"동아리지도교수님 :  {result[3]}, 동아리방위치 :{result[4]}")
+            return result[0], result[1], result[2], result[3], result[4]
         else:
             print("로그인 실패: 학번 또는 전화번호를 확인하세요.")
-            return None, None
+            return None, None, None, None, None
     except mysql.connector.Error as err:
         print(f"로그인 에러: {err}")
-        return None, None
+        return None, None, None, None, None
 
 # 동아리 일정 
 def manage_schedule(connection, user_club):
@@ -107,10 +123,13 @@ def view_schedules(connection, user_club):
             print(f"{user_club} 동아리의 일정 목록:")
             for schedule in schedules:
                 print(f"ID: {schedule[0]} | 이벤트 이름: {schedule[1]} | 날짜: {schedule[2]} | 시간: {schedule[3]}")
+                return schedules  # 일정반환                
         else:
             print(f"{user_club} 동아리에는 등록된 일정이 없습니다.")
+            return [] 
     except mysql.connector.Error as err:
         print(f"일정 조회 에러: {err}")
+        return []  
 
 # 동아리 일정 등록
 def register_schedule(connection, user_club):
@@ -131,13 +150,21 @@ def register_schedule(connection, user_club):
         print(f"일정 등록 에러: {err}")
         connection.rollback()
 
+
+
 # 동아리 일정 수정
 def update_schedule(connection, user_club):
     cursor = connection.cursor()
     try:
         print(f"\n{user_club} 동아리의 일정을 수정합니다.")
-        view_schedules(connection, user_club)  # 일정 보기 함수 호출 (미리 정의되어 있다고 가정)
+                
+        # 일정이 없을시 수정불가
+        schedules = view_schedules(connection, user_club)
+        if not schedules:
+            print("수정할 일정이 없습니다.")
+            return
         
+
         event_id = input("수정할 이벤트의 ID를 입력하세요: ").strip()
         
         # 수정할 항목 선택
@@ -190,7 +217,21 @@ def delete_schedule(connection, user_club):
     cursor = connection.cursor()
     try:
         print(f"\n{user_club} 동아리의 일정을 삭제합니다.")
-        view_schedules(connection, user_club)
+
+                
+        # 일정없을시 삭제 불가 
+        schedules = view_schedules(connection, user_club)
+        if not schedules:
+            print("삭제할 일정이 없습니다.")
+            return
+        
+        schedules = view_schedules(connection, user_club)
+        
+        # 일정이 없다면 삭제할 수 없도록 처리
+        if not schedules:
+            print("삭제할 일정이 없습니다.")
+            return
+        
         event_id = input("삭제할 이벤트의 ID를 입력하세요: ")
 
         # 삭제
@@ -357,7 +398,7 @@ def apply_classroom(connection, user_id, user_club):
         rent_start = input("예약 시작 시간 (YYYY-MM-DD HH:MM)을 입력하세요: ").strip()
         rent_end = input("예약 종료 시간 (YYYY-MM-DD HH:MM)을 입력하세요: ").strip()
         print('강의실 번호 ',classroom_id)
-        print('-----Error------ 사용자 아이디: ', user_id)
+        print('사용자 아이디: ', user_id)
 
         print('시작시간', rent_start)
         print('종료시간', rent_end)
@@ -384,7 +425,6 @@ def apply_classroom(connection, user_id, user_club):
         if overlap_count > 0:
            print("예약 시간이 겹칩니다. 다른 시간을 선택해주세요.")
            return
-        print('line ----------------------')
         
         # 예약 입력 쿼리
         insert_query = """
@@ -470,7 +510,7 @@ def main():
                 if choice == "1":
                     register(connection)
                 elif choice == "2":
-                    user_id, username, user_club = login(connection)
+                    user_id, username, user_club,clublocation,clubacademicadviser = login(connection)                    
                     if user_id and username and user_club:
                         logged_in_menu(connection, user_id, username, user_club)
                 elif choice == "3":
@@ -483,3 +523,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

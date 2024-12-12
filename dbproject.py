@@ -213,29 +213,32 @@ def approve_clubmember(connection, user_club):
         for member in pending_members:
             print(f"학번: {member[1]}, 이름: {member[2]}, 학과: {member[3]}, 전화번호: {member[4]}")
 
-       
+        # 승인할 회원 선택
         uid_to_approve = input("승인할 회원의 학번을 입력하세요: ")
 
-        #clubmember 테이블 삽입
-        insert_query = """
-        INSERT INTO clubmember (memberUid, membername, memberdepartment, memberphonenumber)
-        SELECT register_id, membername, memberdepartment, memberphonenumber
-        FROM register
-        WHERE RegisterUid = %s
-        """
-        cursor.execute(insert_query, (uid_to_approve,))
-        connection.commit()
-
-        # 상태를 '1'로 업데이트
+       
+        # 상태를 1로 승인
         update_query = """
         UPDATE register
         SET approval_status = 1
-        WHERE RegisterUid = %s
+        WHERE register_id = %s
         """
         cursor.execute(update_query, (uid_to_approve,))
         connection.commit()
 
         print(f"{uid_to_approve} 학번의 회원이 승인되었습니다.")
+
+ # clubmember 테이블에 해당 회원 추가 (register_clubname 포함)
+        insert_query = """
+        INSERT INTO clubmember (memberUid, membername, memberdepartment, memberphonenumber, register_clubname)
+        SELECT register_id, membername, memberdepartment, memberphonenumber, register_clubname
+        FROM register
+        WHERE register_id = %s
+        """
+        cursor.execute(insert_query, (uid_to_approve,))
+        connection.commit()
+
+        print(f"{uid_to_approve} 학번의 회원이 동아리 회원으로 추가되었습니다.")
 
     except mysql.connector.Error as err:
         print(f"에러 발생: {err}")
@@ -244,26 +247,31 @@ def approve_clubmember(connection, user_club):
         cursor.close()
 
 
-# 동아리 회원 모두 보기
+
 def view_clubmember(connection, user_club):
     cursor = connection.cursor()
     try:
         print(f"\n{user_club} 동아리의 모든 회원을 조회합니다.")
         
-        # 동아리의 승인된 회원 목록 조회
-        query = "SELECT Uid, username, userphonenumber FROM user WHERE user_club = %s AND status = 'approved'"
+        # 동아리의 승인된 회원 목록 조회 (동아리 이름 제외)
+        query = """
+        SELECT memberUid, membername, memberdepartment, memberphonenumber
+        FROM clubmember
+        WHERE register_clubname = %s
+        """
         cursor.execute(query, (user_club,))
         members = cursor.fetchall()
 
         if members:
-            print(f"{user_club} 동아리의 승인된 회원 목록:")
+            print(f"{user_club} 동아리의 모든 회원 목록:")
             for member in members:
-                print(f"학번: {member[0]}, 이름: {member[1]}, 전화번호: {member[2]}")
+                print(f"학번: {member[0]}, 이름: {member[1]}, 학과: {member[2]}, 전화번호: {member[3]}")
         else:
-            print(f"{user_club} 동아리에는 승인된 회원이 없습니다.")
+            print(f"{user_club} 동아리에는 등록된 회원이 없습니다.")
     except mysql.connector.Error as err:
         print(f"회원 조회 에러: {err}")
-
+    finally:
+        cursor.close()
 # 로그인 후 메뉴
 def logged_in_menu(connection, username, user_club):
     while True:
